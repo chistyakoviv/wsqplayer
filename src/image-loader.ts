@@ -55,19 +55,19 @@ export class ImageLoader implements Loader<HTMLImageElement> {
     }
   }
 
-  on(eventName: string, fn: (...args: unknown[]) => void) {
+  on(eventName: string, fn: (...args: unknown[]) => void): void {
     this.events.addEventListener(eventName, fn);
   }
 
-  off(eventName: string, fn: (...args: unknown[]) => void) {
+  off(eventName: string, fn: (...args: unknown[]) => void): void {
     this.events.removeEventListener(eventName, fn);
   }
 
-  get total() {
+  get total(): number {
     return this.urls.length;
   }
 
-  get loaded() {
+  get loaded(): number {
     return this.imagesLoaded;
   }
 }

@@ -52,7 +52,7 @@ export class SqPlayer implements EventEmitter {
 
     this.events.dispatchEvent(new CustomEvent('loading:start'));
 
-    const loadHandler = (...args: unknown[]) => {
+    const loadHandler = (...args: unknown[]): void => {
       const e: CustomEvent = args[0] as CustomEvent;
       const {name, index, total} = e.detail;
       const bufferSize = this.opts.bufferSize ?? 0;
@@ -94,7 +94,7 @@ export class SqPlayer implements EventEmitter {
     }
   }
 
-  setSize(width: number, height: number) {
+  setSize(width: number, height: number): void {
     this.frameSize = {width, height};
     for (const seq of Object.values(this.sequences)) {
       seq.setSize(width, height);
@@ -102,16 +102,16 @@ export class SqPlayer implements EventEmitter {
   }
 
   // Frames per second
-  setFrameRate(frameRate: number) {
+  setFrameRate(frameRate: number): void {
     this.frameDeltaTime = 1000 / frameRate;
   }
 
-  setSequence(name: string) {
+  setSequence(name: string): void {
     this.curSeqName = name;
     this.sequences[this.curSeqName].reset();
   }
 
-  setRenderer(canvas: HTMLCanvasElement) {
+  setRenderer(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
 
     const ctx = this.canvas.getContext('2d');
@@ -122,27 +122,27 @@ export class SqPlayer implements EventEmitter {
     this.ctx = ctx;
   }
 
-  loop() {
+  loop(): void {
     this.sequences[this.curSeqName].loop();
   }
 
-  noloop() {
+  noloop(): void {
     this.sequences[this.curSeqName].noloop();
   }
 
-  play() {
+  play(): void {
     this.sequences[this.curSeqName].play();
   }
 
-  pause() {
+  pause(): void {
     this.sequences[this.curSeqName].pause();
   }
 
-  setProgress(progress: number) {
+  setProgress(progress: number): void {
     this.sequences[this.curSeqName].setProgress(progress);
   }
 
-  transition(sequenceName: string, opts?: TransitionOpts) {
+  transition(sequenceName: string, opts?: TransitionOpts): void {
     this.transitions.push({
       seqName: sequenceName,
       startTime: 0,
@@ -157,11 +157,11 @@ export class SqPlayer implements EventEmitter {
     this.isTransition = true;
   }
 
-  on(eventName: string, fn: (...args: unknown[]) => void) {
+  on(eventName: string, fn: (...args: unknown[]) => void): void {
     this.events.addEventListener(eventName, fn);
   }
 
-  off(eventName: string, fn: (...args: unknown[]) => void) {
+  off(eventName: string, fn: (...args: unknown[]) => void): void {
     this.events.removeEventListener(eventName, fn);
   }
 
@@ -169,7 +169,7 @@ export class SqPlayer implements EventEmitter {
     sequenceName: string,
     eventName: string,
     fn: (...args: unknown[]) => void,
-  ) {
+  ): void {
     this.sequences[sequenceName].on(eventName, fn);
   }
 
@@ -177,7 +177,7 @@ export class SqPlayer implements EventEmitter {
     sequenceName: string,
     eventName: string,
     fn: (...args: unknown[]) => void,
-  ) {
+  ): void {
     this.sequences[sequenceName].off(eventName, fn);
   }
 
@@ -185,7 +185,7 @@ export class SqPlayer implements EventEmitter {
     sequenceName: string,
     eventName: string,
     fn: (...args: unknown[]) => void,
-  ) {
+  ): void {
     const wrapper = (...args: unknown[]) => {
       fn(...args);
       this.offSequence(sequenceName, eventName, wrapper);
@@ -197,7 +197,7 @@ export class SqPlayer implements EventEmitter {
     clearTimeout(this.timer);
   }
 
-  private renderLoop = () => {
+  private renderLoop = (): void => {
     const isReady = this.sequences[this.curSeqName].advance(this.frameStep);
     if (!isReady) {
       this.events.dispatchEvent(new CustomEvent('loading:start'));
@@ -207,7 +207,7 @@ export class SqPlayer implements EventEmitter {
     this.timer = setTimeout(this.renderLoop, this.frameDeltaTime);
   };
 
-  private renderFrame() {
+  private renderFrame(): void {
     const curSeq = this.sequences[this.curSeqName];
     const frame = curSeq.currentFrame;
     this.ctx.clearRect(0, 0, this.frameSize.width, this.frameSize.height);

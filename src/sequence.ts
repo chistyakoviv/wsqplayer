@@ -53,11 +53,11 @@ export class Sequence implements EventEmitter {
     this.imageLoader.load();
   }
 
-  get name() {
+  get name(): string {
     return this.opts.name;
   }
 
-  get frameCount() {
+  get frameCount(): number {
     return this.opts.frameCount;
   }
 
@@ -81,12 +81,12 @@ export class Sequence implements EventEmitter {
     return this.frameState.current;
   }
 
-  setSize(width: number, height: number) {
+  setSize(width: number, height: number): void {
     this.frameSize = {width, height};
     this.images = [];
   }
 
-  private calsSizes(img: HTMLImageElement, frameSize: FrameSize) {
+  private calsSizes(img: HTMLImageElement, frameSize: FrameSize): CanvasImage {
     const {width: scaledWidth, height: scaledHeight} = fitCover(
       img.width,
       img.height,
@@ -162,19 +162,19 @@ export class Sequence implements EventEmitter {
     return true;
   }
 
-  loop() {
+  loop(): void {
     this.isLooping = true;
   }
 
-  noloop() {
+  noloop(): void {
     this.isLooping = false;
   }
 
-  play() {
+  play(): void {
     this.isPlaying = true;
   }
 
-  pause() {
+  pause(): void {
     this.isPlaying = false;
   }
 
@@ -187,7 +187,7 @@ export class Sequence implements EventEmitter {
     return this.images[index];
   }
 
-  reset() {
+  reset(): void {
     this.frameState = {
       previous: 0,
       current: 0,
@@ -197,7 +197,7 @@ export class Sequence implements EventEmitter {
     this.isLastFrame = false;
   }
 
-  setProgress(progress: number) {
+  setProgress(progress: number): void {
     progress = clamp(progress, 0, 1);
     this.frameState = {
       previous: this.frameState.current,
@@ -205,7 +205,7 @@ export class Sequence implements EventEmitter {
     };
   }
 
-  on(eventName: string, fn: (...args: unknown[]) => void) {
+  on(eventName: string, fn: (...args: unknown[]) => void): void {
     if (eventName.startsWith(this.progressEventPrefix)) {
       const range = eventName.substring(this.progressEventPrefix.length);
       // TODO(Ilya): Optimize storing segments by putting them into a hashtable,
@@ -225,7 +225,7 @@ export class Sequence implements EventEmitter {
     }
   }
 
-  off(eventName: string, fn: (...args: unknown[]) => void) {
+  off(eventName: string, fn: (...args: unknown[]) => void): void {
     if (eventName.startsWith(this.progressEventPrefix)) {
       const range = eventName.substring(this.progressEventPrefix.length);
       let isFound = false;
@@ -259,11 +259,11 @@ export class Sequence implements EventEmitter {
     }
   }
 
-  get loadedFrames() {
+  get loadedFrames(): number {
     return this.imageLoader.loaded;
   }
 
-  get totalFrames() {
+  get totalFrames(): number {
     return this.frameCount;
   }
 
