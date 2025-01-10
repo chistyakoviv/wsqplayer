@@ -1,7 +1,7 @@
 import {clamp, fitCover, parseSeparatedNumbers, prependZeros} from 'helpers';
 import {ImageLoader} from 'image-loader';
 import {EventEmitter, FrameSize, Loader} from 'types';
-import {CanvasImage, Frame, FrameData, Segment, SeqOptions} from 'types';
+import {CanvasImage, Frame, Segment, SeqOptions} from 'types';
 
 export class Sequence implements EventEmitter {
   private progressEventPrefix = 'progress:';
@@ -73,7 +73,7 @@ export class Sequence implements EventEmitter {
     return this.isLastFrame;
   }
 
-  get currentFrame(): FrameData {
+  get currentFrame(): CanvasImage {
     return this.getFrame(this.frameState.current);
   }
 
@@ -94,7 +94,7 @@ export class Sequence implements EventEmitter {
       frameSize.height,
     );
     return {
-      orig: img,
+      img,
       width: scaledWidth,
       height: scaledHeight,
       dx: (frameSize.width - scaledWidth) / 2,
@@ -178,16 +178,13 @@ export class Sequence implements EventEmitter {
     this.isPlaying = false;
   }
 
-  getFrame(index: number): FrameData {
+  getFrame(index: number): CanvasImage {
     index = clamp(index, 0, this.frameCount - 1);
     if (!this.images[index]) {
       const img = this.imageLoader.get(index);
       this.images[index] = this.calsSizes(img, this.frameSize);
     }
-    return {
-      index,
-      img: this.images[index],
-    };
+    return this.images[index];
   }
 
   reset() {

@@ -266,15 +266,15 @@ export class SqPlayer implements EventEmitter {
       });
     } else {
       this.ctx.drawImage(
-        frame.img.orig,
+        frame.img,
         0,
         0,
-        frame.img.orig.width,
-        frame.img.orig.height,
-        frame.img.dx,
-        frame.img.dy,
         frame.img.width,
         frame.img.height,
+        frame.dx,
+        frame.dy,
+        frame.width,
+        frame.height,
       );
     }
   }
@@ -301,6 +301,6 @@ export class SqPlayer implements EventEmitter {
   }
 
   get currentFrame(): number {
-    return this.sequences[this.curSeqName].currentFrame.index;
+    return this.sequences[this.curSeqName].currentFrameIndex;
   }
 }

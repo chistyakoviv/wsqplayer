@@ -1,7 +1,7 @@
 import {Sequence} from 'sequence';
 
 export interface CanvasImage {
-  orig: HTMLImageElement;
+  img: HTMLImageElement;
   width: number;
   height: number;
   dx: number;
@@ -16,11 +16,6 @@ export interface Frame {
 export interface FrameSize {
   width: number;
   height: number;
-}
-
-export interface FrameData {
-  index: number;
-  img: CanvasImage;
 }
 
 export interface TransitionSequences {
