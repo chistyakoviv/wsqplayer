@@ -1,9 +1,14 @@
-import {clamp, parseSeparatedNumbers} from 'helpers';
+import {clamp, fitCover, parseSeparatedNumbers, prependZeros} from 'helpers';
+import {ImageLoader} from 'image-loader';
+import {EventEmitter, FrameSize, Loader} from 'types';
 import {CanvasImage, Frame, FrameData, Segment, SeqOptions} from 'types';
 
-export class Sequence {
+export class Sequence implements EventEmitter {
   private progressEventPrefix = 'progress:';
 
+  private opts: SeqOptions;
+
+  private imageLoader: Loader<HTMLImageElement> = new ImageLoader();
   private events: EventTarget = new EventTarget();
   private segments: Segment[] = [];
   private images: CanvasImage[] = [];
@@ -12,12 +17,41 @@ export class Sequence {
   private isPlaying = false;
   private isLastFrame = false;
 
+  private frameSize: FrameSize = {width: 0, height: 0};
   private frameState: Frame = {
     current: 0,
     previous: 0,
   };
 
-  constructor(private opts: SeqOptions) {}
+  constructor(opts: SeqOptions) {
+    this.opts = opts;
+
+    const endFrame = opts.startFrame + opts.frameCount;
+    for (let i = opts.startFrame; i < endFrame; i++) {
+      const pathFn =
+        opts.pathFn ??
+        ((index: number, opts: SeqOptions) =>
+          `${opts.path ?? ''}${prependZeros(index, opts.minNumerationLen ?? 3)}.${opts.extension ?? 'jpg'}`);
+      const path = pathFn(i, opts);
+      this.imageLoader.add(path);
+    }
+
+    this.imageLoader.on('loaded', (...args: unknown[]) => {
+      const e: CustomEvent = args[0] as CustomEvent;
+      const {index, image} = e.detail;
+      this.images[index] = this.calsSizes(image, this.frameSize);
+      this.events.dispatchEvent(
+        new CustomEvent('loaded', {
+          detail: {
+            name: this.name,
+            index,
+            total: this.totalFrames,
+          },
+        }),
+      );
+    });
+    this.imageLoader.load();
+  }
 
   get name() {
     return this.opts.name;
@@ -27,7 +61,7 @@ export class Sequence {
     return this.opts.frameCount;
   }
 
-  get isPlayinging(): boolean {
+  get isPlay(): boolean {
     return this.isPlaying;
   }
 
@@ -43,18 +77,50 @@ export class Sequence {
     return this.getFrame(this.frameState.current);
   }
 
-  advance(step = 1) {
+  get currentFrameIndex(): number {
+    return this.frameState.current;
+  }
+
+  setSize(width: number, height: number) {
+    this.frameSize = {width, height};
+    this.images = [];
+  }
+
+  private calsSizes(img: HTMLImageElement, frameSize: FrameSize) {
+    const {width: scaledWidth, height: scaledHeight} = fitCover(
+      img.width,
+      img.height,
+      frameSize.width,
+      frameSize.height,
+    );
+    return {
+      orig: img,
+      width: scaledWidth,
+      height: scaledHeight,
+      dx: (frameSize.width - scaledWidth) / 2,
+      dy: (frameSize.height - scaledHeight) / 2,
+    };
+  }
+
+  advance(step = 1): boolean {
     const lastFrame = this.frameCount - 1;
     let isEnd = this.frameState.current === lastFrame;
 
+    if (!this.isPlaying) {
+      return true;
+    }
+
+    const next =
+      (this.frameState.current + (isEnd && !this.isLooping ? 0 : step)) %
+      this.frameCount;
+
+    if (!this.imageLoader.isLoaded(next)) {
+      return false;
+    }
+
     this.frameState = {
-      previous: this.isPlaying
-        ? this.frameState.current
-        : this.frameState.previous,
-      current: this.isPlaying
-        ? (this.frameState.current + (isEnd && !this.isLooping ? 0 : step)) %
-          this.frameCount
-        : clamp(this.frameState.current, 0, lastFrame),
+      previous: this.frameState.current,
+      current: next,
     };
 
     // Reevaluate isEnd after advancing.
@@ -70,12 +136,12 @@ export class Sequence {
       this.isLastFrame = false;
     }
 
-    // Dispatch progress sequenceEvents
+    // Dispatch progress event
     const frameDiff = this.frameState.current - this.frameState.previous;
     if (Math.abs(frameDiff) > 0) {
       for (let i = 0; i < this.segments.length; i++) {
         const segment = this.segments[i];
-        // TODO(Ilya): implement dispatching sequenceEvents in both directions (forward and backward)
+        // TODO(Ilya): implement dispatching progress events in both directions (forward and backward)
         if (
           this.frameState.current >= segment.start &&
           this.frameState.previous <= segment.end
@@ -93,6 +159,7 @@ export class Sequence {
         }
       }
     }
+    return true;
   }
 
   loop() {
@@ -113,6 +180,10 @@ export class Sequence {
 
   getFrame(index: number): FrameData {
     index = clamp(index, 0, this.frameCount - 1);
+    if (!this.images[index]) {
+      const img = this.imageLoader.get(index);
+      this.images[index] = this.calsSizes(img, this.frameSize);
+    }
     return {
       index,
       img: this.images[index],
@@ -192,7 +263,11 @@ export class Sequence {
   }
 
   get loadedFrames() {
-    return this.images.length;
+    return this.imageLoader.loaded;
+  }
+
+  get totalFrames() {
+    return this.frameCount;
   }
 
   private parseSegment(range: string): Segment {

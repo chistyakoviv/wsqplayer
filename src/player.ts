@@ -1,13 +1,8 @@
-import {clamp, fitCover} from 'helpers';
+import {clamp} from 'helpers';
 import {Sequence} from 'sequence';
 import {defaultTransition} from 'transitions';
-import {
-  CanvasImage,
-  FrameSize,
-  PlayerOpts,
-  Transition,
-  TransitionOpts,
-} from 'types';
+import {EventEmitter} from 'types';
+import {FrameSize, PlayerOpts, Transition, TransitionOpts} from 'types';
 
 /**
  * Sequence Player.
@@ -20,8 +15,11 @@ import {
  * @dispatches [loading:(start|progress|end), transition:(start|end), progress:(single number or range between 0 and 1), end]
  * @author Chistyakov Ilya <ichistyakovv@gmail.com>
  */
-export class SqPlayer {
+export class SqPlayer implements EventEmitter {
   private frameStep = 1;
+
+  private totalFrames = 0;
+  private loadedFrames = 0;
 
   private canvas!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
@@ -33,6 +31,7 @@ export class SqPlayer {
   private opts: PlayerOpts;
 
   private isTransition = false;
+  private isLoad = false;
 
   private transitions: Transition[] = [];
   private sequences: Record<string, Sequence> = {};
@@ -45,17 +44,61 @@ export class SqPlayer {
     this.setFrameRate(opts.frameRate);
     this.setSize(canvas.width, canvas.height);
 
-    this.opts = opts;
+    this.opts = {
+      waitAll: true,
+      bufferSize: 0,
+      ...opts,
+    };
+
+    this.events.dispatchEvent(new CustomEvent('loading:start'));
+
+    const loadHandler = (...args: unknown[]) => {
+      const e: CustomEvent = args[0] as CustomEvent;
+      const {name, index, total} = e.detail;
+      const bufferSize = this.opts.bufferSize ?? 0;
+
+      this.loadedFrames++;
+
+      if ((!this.opts.waitAll || bufferSize > 0) && name === this.curSeqName) {
+        if (
+          // All sequences are not required to be loaded, and the current sequence is ready, or
+          (!this.opts.waitAll && index + 1 === total) ||
+          // The buffer contains enough frames to play the current sequence.
+          (bufferSize > 0 &&
+            (this.sequences[name].currentFrameIndex >= index - bufferSize ||
+              index + 1 === total))
+        ) {
+          this.renderLoop();
+          this.events.dispatchEvent(new CustomEvent('loading:end'));
+        }
+      }
+
+      const progress = this.loadedFrames / this.totalFrames;
+      this.events.dispatchEvent(
+        new CustomEvent('loading:progress', {
+          detail: {
+            progress,
+          },
+        }),
+      );
+    };
+
+    // Count frames before loading
+    for (const seqOpts of opts.sequences) {
+      this.totalFrames += seqOpts.frameCount;
+    }
 
     for (const seqOpts of opts.sequences) {
       this.sequences[seqOpts.name] = new Sequence(seqOpts);
+      this.sequences[seqOpts.name].on('loaded', loadHandler);
     }
-
-    this.events.dispatchEvent(new CustomEvent('loading:start'));
   }
 
   setSize(width: number, height: number) {
     this.frameSize = {width, height};
+    for (const seq of Object.values(this.sequences)) {
+      seq.setSize(width, height);
+    }
   }
 
   // Frames per second
@@ -154,39 +197,18 @@ export class SqPlayer {
     clearTimeout(this.timer);
   }
 
-  private calsSizes(img: HTMLImageElement, frameSize: FrameSize) {
-    const {width: scaledWidth, height: scaledHeight} = fitCover(
-      img.width,
-      img.height,
-      frameSize.width,
-      frameSize.height,
-    );
-    return {
-      orig: img,
-      width: scaledWidth,
-      height: scaledHeight,
-      dx: (frameSize.width - scaledWidth) / 2,
-      dy: (frameSize.height - scaledHeight) / 2,
-    };
-  }
-
-  private recalcSizes(images: CanvasImage[], frameSize: FrameSize) {
-    return images.map(
-      (img): CanvasImage => this.calsSizes(img.orig, frameSize),
-    );
-  }
-
   private renderLoop = () => {
-    this.sequences[this.curSeqName].advance(this.frameStep);
+    const isReady = this.sequences[this.curSeqName].advance(this.frameStep);
+    if (!isReady) {
+      this.events.dispatchEvent(new CustomEvent('loading:start'));
+      return;
+    }
     this.renderFrame();
     this.timer = setTimeout(this.renderLoop, this.frameDeltaTime);
   };
 
   private renderFrame() {
     const curSeq = this.sequences[this.curSeqName];
-    if (curSeq.loadedFrames === 0) {
-      return;
-    }
     const frame = curSeq.currentFrame;
     this.ctx.clearRect(0, 0, this.frameSize.width, this.frameSize.height);
     if (this.isTransition) {
@@ -257,8 +279,8 @@ export class SqPlayer {
     }
   }
 
-  get isPlayinging(): boolean {
-    return this.sequences[this.curSeqName].isPlayinging;
+  get isPlaying(): boolean {
+    return this.sequences[this.curSeqName].isPlay;
   }
 
   get isLoop(): boolean {
@@ -272,6 +294,10 @@ export class SqPlayer {
   get isTransitioning(): boolean {
     // The presence of unhandled transitions is considered a state in transition
     return this.transitions.length > 0;
+  }
+
+  get isLoading(): boolean {
+    return this.isLoad;
   }
 
   get currentFrame(): number {

@@ -34,11 +34,6 @@ export type TransitionFn = (
   sequence: TransitionSequences,
 ) => void;
 
-// export interface FreezedFrame {
-//   sequenceName: string;
-//   frame: number;
-// }
-
 export interface Transition {
   seqName: string;
   startTime: number;
@@ -58,28 +53,14 @@ export interface TransitionOpts {
 }
 
 export interface SeqOptions {
-  path: string;
+  path?: string;
   frameCount: number;
   name: string;
   startFrame: number;
   minNumerationLen?: number;
+  extension?: string;
+  pathFn?: (index: number, opts: SeqOptions) => string;
 }
-
-// export interface Sequence {
-//   frameCount: number;
-//   images: CanvasImage[];
-// }
-
-// export interface CanvasImageGroup {
-//   name: string;
-//   images: CanvasImage[];
-//   frameCount: number;
-// }
-
-// export interface PromiseQueue {
-//   named: Record<string, Promise<CanvasImage>[]>;
-//   all: Promise<CanvasImageGroup>[];
-// }
 
 export interface Segment {
   start: number;
@@ -90,5 +71,20 @@ export interface PlayerOpts {
   sequences: SeqOptions[];
   startSequence: string;
   frameRate: number;
-  extension: string;
+  bufferSize?: number;
+  waitAll?: boolean;
+}
+
+export interface EventEmitter {
+  on: (eventName: string, fn: (...args: unknown[]) => void) => void;
+  off: (eventName: string, fn: (...args: unknown[]) => void) => void;
+}
+
+export interface Loader<T> extends EventEmitter {
+  add: (url: string) => void;
+  load: () => void;
+  get(index: number): T;
+  isLoaded(index: number): boolean;
+  get total(): number;
+  get loaded(): number;
 }
