@@ -1,6 +1,6 @@
 import {clamp, fitCover, parseSeparatedNumbers, prependZeros} from 'helpers';
 import {ImageLoader} from 'image-loader';
-import {EventEmitter, FrameSize, Loader} from 'types';
+import {EventEmitter, FrameData, FrameSize, Loader} from 'types';
 import {CanvasImage, Frame, Segment, SeqOptions} from 'types';
 
 export class Sequence implements EventEmitter {
@@ -18,9 +18,11 @@ export class Sequence implements EventEmitter {
   private isLastFrame = false;
 
   private frameSize: FrameSize = {width: 0, height: 0};
+  // TODO:Add the next frame to the state to ensure proper handling of setProgress calls
   private frameState: Frame = {
     current: 0,
     previous: 0,
+    // next: 0,
   };
 
   constructor(opts: SeqOptions) {
@@ -102,12 +104,12 @@ export class Sequence implements EventEmitter {
     };
   }
 
-  advance(step = 1): boolean {
+  advance(step = 1): FrameData {
     const lastFrame = this.frameCount - 1;
     let isEnd = this.frameState.current === lastFrame;
 
     if (!this.isPlaying) {
-      return true;
+      return {};
     }
 
     const next =
@@ -115,13 +117,15 @@ export class Sequence implements EventEmitter {
       this.frameCount;
 
     if (!this.imageLoader.isLoaded(next)) {
-      return false;
+      return {};
     }
 
     this.frameState = {
       previous: this.frameState.current,
       current: next,
     };
+
+    const events: (() => void)[] = [];
 
     // Reevaluate isEnd after advancing.
     isEnd = this.frameState.current === lastFrame;
@@ -131,7 +135,7 @@ export class Sequence implements EventEmitter {
       if (!this.isLoop) {
         this.isPlaying = false;
       }
-      this.events.dispatchEvent(new CustomEvent('end'));
+      events.push(() => this.events.dispatchEvent(new CustomEvent('end')));
     } else if (this.frameState.current !== lastFrame && this.isLastFrame) {
       this.isLastFrame = false;
     }
@@ -149,17 +153,24 @@ export class Sequence implements EventEmitter {
           const progress =
             Math.max(this.frameState.current - segment.start, 0.0001) /
             Math.max(segment.end - segment.start, 0.0001);
-          this.events.dispatchEvent(
-            new CustomEvent(`progress:${segment.start}-${segment.end}`, {
-              detail: {
-                progress,
-              },
-            }),
+          events.push(() =>
+            this.events.dispatchEvent(
+              new CustomEvent(`progress:${segment.start}-${segment.end}`, {
+                detail: {
+                  progress,
+                },
+              }),
+            ),
           );
         }
       }
     }
-    return true;
+    return {
+      img: this.currentFrame,
+      dispatchEvents: () => {
+        events.forEach(fn => fn());
+      },
+    };
   }
 
   loop(): void {

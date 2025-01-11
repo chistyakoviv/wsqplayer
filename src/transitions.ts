@@ -8,28 +8,31 @@ export const defaultTransition: TransitionFn = (
 ) => {
   progress = easeInOutQuad(progress);
   const invertedProgress = 1 - progress;
-  const prevFrame = sequences.previous.currentFrame;
+  const previousFrameData = sequences.previous.advance();
   const currentFrame = sequences.current.currentFrame;
+  if (previousFrameData.img) {
+    ctx.drawImage(
+      previousFrameData.img.img,
+      0,
+      0,
+      previousFrameData.img.img.width * invertedProgress,
+      previousFrameData.img.img.height,
+      previousFrameData.img.dx,
+      previousFrameData.img.dy,
+      previousFrameData.img.img.width * invertedProgress,
+      previousFrameData.img.img.height,
+    );
+  }
   ctx.drawImage(
-    prevFrame.img.orig,
-    0,
-    0,
-    prevFrame.img.orig.width * invertedProgress,
-    prevFrame.img.orig.height,
-    prevFrame.img.dx,
-    prevFrame.img.dy,
-    prevFrame.img.width * invertedProgress,
-    prevFrame.img.height,
-  );
-  ctx.drawImage(
-    currentFrame.img.orig,
-    currentFrame.img.orig.width * invertedProgress,
-    0,
-    currentFrame.img.orig.width * progress,
-    currentFrame.img.orig.height,
+    currentFrame.img,
     currentFrame.img.width * invertedProgress,
-    currentFrame.img.dy,
+    0,
+    currentFrame.img.width * progress,
+    currentFrame.img.height,
+    currentFrame.img.width * invertedProgress,
+    currentFrame.dy,
     currentFrame.img.width * progress,
     currentFrame.img.height,
   );
+  previousFrameData.dispatchEvents?.();
 };

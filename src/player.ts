@@ -1,7 +1,7 @@
 import {clamp} from 'helpers';
 import {Sequence} from 'sequence';
 import {defaultTransition} from 'transitions';
-import {EventEmitter} from 'types';
+import {CanvasImage, EventEmitter} from 'types';
 import {FrameSize, PlayerOpts, Transition, TransitionOpts} from 'types';
 
 /**
@@ -58,6 +58,11 @@ export class SqPlayer implements EventEmitter {
       const bufferSize = this.opts.bufferSize ?? 0;
 
       this.loadedFrames++;
+
+      // Render the initial frame of the current sequence as soon as it is loaded
+      if (name === this.curSeqName && index === 0) {
+        this.renderFrame(this.sequences[name].getFrame(index));
+      }
 
       if ((!this.opts.waitAll || bufferSize > 0) && name === this.curSeqName) {
         if (
@@ -198,18 +203,18 @@ export class SqPlayer implements EventEmitter {
   }
 
   private renderLoop = (): void => {
-    const isReady = this.sequences[this.curSeqName].advance(this.frameStep);
-    if (!isReady) {
+    const frameData = this.sequences[this.curSeqName].advance(this.frameStep);
+    if (!frameData.img) {
       this.events.dispatchEvent(new CustomEvent('loading:start'));
       return;
     }
-    this.renderFrame();
+    this.renderFrame(frameData.img);
+    frameData.dispatchEvents?.();
     this.timer = setTimeout(this.renderLoop, this.frameDeltaTime);
   };
 
-  private renderFrame(): void {
+  private renderFrame(frame: CanvasImage): void {
     const curSeq = this.sequences[this.curSeqName];
-    const frame = curSeq.currentFrame;
     this.ctx.clearRect(0, 0, this.frameSize.width, this.frameSize.height);
     if (this.isTransition) {
       const transition = this.transitions[0];

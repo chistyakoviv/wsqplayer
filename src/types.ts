@@ -83,3 +83,8 @@ export interface Loader<T> extends EventEmitter {
   get total(): number;
   get loaded(): number;
 }
+
+export interface FrameData {
+  img?: CanvasImage;
+  dispatchEvents?: () => void;
+}
