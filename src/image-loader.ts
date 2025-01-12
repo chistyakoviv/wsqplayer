@@ -5,8 +5,8 @@ import {Loader} from 'types';
  *
  * @dispatches [loaded, error]
  */
-export class ImageLoader implements Loader<HTMLImageElement> {
-  private images: HTMLImageElement[] = [];
+export class ImageLoader implements Loader<HTMLImageElement | null> {
+  private images: (HTMLImageElement | null)[] = [];
   private urls: string[] = [];
 
   private events = new EventTarget();
@@ -17,7 +17,7 @@ export class ImageLoader implements Loader<HTMLImageElement> {
     this.urls.push(url);
   }
 
-  get(index: number): HTMLImageElement {
+  get(index: number): HTMLImageElement | null {
     return this.images[index];
   }
 
@@ -43,6 +43,8 @@ export class ImageLoader implements Loader<HTMLImageElement> {
       };
       img.onerror = () => {
         console.error(`Failed to load image: ${this.urls[i]}`);
+        this.images[i] = null;
+        this.imagesLoaded++;
         this.events.dispatchEvent(
           new CustomEvent('error', {
             detail: {

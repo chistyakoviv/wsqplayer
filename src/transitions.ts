@@ -8,31 +8,33 @@ export const defaultTransition: TransitionFn = (
 ) => {
   progress = easeInOutQuad(progress);
   const invertedProgress = 1 - progress;
-  const previousFrameData = sequences.previous.advance();
+  const previousFrameData = sequences.previous.next();
   const currentFrame = sequences.current.currentFrame;
-  if (previousFrameData.img) {
+  if (previousFrameData.frame && previousFrameData.frame.img) {
     ctx.drawImage(
-      previousFrameData.img.img,
+      previousFrameData.frame.img,
       0,
       0,
-      previousFrameData.img.img.width * invertedProgress,
-      previousFrameData.img.img.height,
-      previousFrameData.img.dx,
-      previousFrameData.img.dy,
-      previousFrameData.img.img.width * invertedProgress,
-      previousFrameData.img.img.height,
+      previousFrameData.frame.img.width * invertedProgress,
+      previousFrameData.frame.img.height,
+      previousFrameData.frame.dx,
+      previousFrameData.frame.dy,
+      previousFrameData.frame.img.width * invertedProgress,
+      previousFrameData.frame.img.height,
     );
   }
-  ctx.drawImage(
-    currentFrame.img,
-    currentFrame.img.width * invertedProgress,
-    0,
-    currentFrame.img.width * progress,
-    currentFrame.img.height,
-    currentFrame.img.width * invertedProgress,
-    currentFrame.dy,
-    currentFrame.img.width * progress,
-    currentFrame.img.height,
-  );
+  if (currentFrame.img) {
+    ctx.drawImage(
+      currentFrame.img,
+      currentFrame.img.width * invertedProgress,
+      0,
+      currentFrame.img.width * progress,
+      currentFrame.img.height,
+      currentFrame.img.width * invertedProgress,
+      currentFrame.dy,
+      currentFrame.img.width * progress,
+      currentFrame.img.height,
+    );
+  }
   previousFrameData.dispatchEvents?.();
 };

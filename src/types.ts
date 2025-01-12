@@ -1,7 +1,7 @@
 import {Sequence} from 'sequence';
 
 export interface CanvasImage {
-  img: HTMLImageElement;
+  img: HTMLImageElement | null;
   width: number;
   height: number;
   dx: number;
@@ -11,6 +11,7 @@ export interface CanvasImage {
 export interface Frame {
   current: number;
   previous: number;
+  next: number;
 }
 
 export interface FrameSize {
@@ -85,6 +86,6 @@ export interface Loader<T> extends EventEmitter {
 }
 
 export interface FrameData {
-  img?: CanvasImage;
+  frame?: CanvasImage;
   dispatchEvents?: () => void;
 }

@@ -8,16 +8,13 @@ import {FrameSize, PlayerOpts, Transition, TransitionOpts} from 'types';
  * Sequence Player.
  *
  * Feature Roadmap
- * [-] switch to the loading state if the playing sequence is not loaded yet
- * [-] support image sets for different resolutions
- * [-] backward playing
+ * [+] switch to the loading state if the playing sequence is not loaded yet
+ * [+] backward playing
  *
  * @dispatches [loading:(start|progress|end), transition:(start|end), progress:(single number or range between 0 and 1), end]
  * @author Chistyakov Ilya <ichistyakovv@gmail.com>
  */
 export class SqPlayer implements EventEmitter {
-  private frameStep = 1;
-
   private totalFrames = 0;
   private loadedFrames = 0;
 
@@ -40,16 +37,17 @@ export class SqPlayer implements EventEmitter {
   private events = new EventTarget();
 
   constructor(canvas: HTMLCanvasElement, opts: PlayerOpts) {
-    this.setRenderer(canvas);
-    this.setFrameRate(opts.frameRate);
-    this.setSize(canvas.width, canvas.height);
-
     this.opts = {
       waitAll: true,
       bufferSize: 0,
       ...opts,
     };
 
+    this.setRenderer(canvas);
+    this.setFrameRate(this.opts.frameRate);
+    this.setSize(canvas.width, canvas.height);
+
+    this.isLoad = true;
     this.events.dispatchEvent(new CustomEvent('loading:start'));
 
     const loadHandler = (...args: unknown[]): void => {
@@ -68,11 +66,17 @@ export class SqPlayer implements EventEmitter {
         if (
           // All sequences are not required to be loaded, and the current sequence is ready, or
           (!this.opts.waitAll && index + 1 === total) ||
-          // The buffer contains enough frames to play the current sequence.
-          (bufferSize > 0 &&
+          // The buffer contains enough frames to play the current sequence in forward direction.
+          (this.sequences[name].direction > 0 &&
+            bufferSize > 0 &&
             (this.sequences[name].currentFrameIndex >= index - bufferSize ||
-              index + 1 === total))
+              index + 1 === total)) ||
+          // Play in backward direction only when all the frames of the current sequence are loaded
+          (this.sequences[name].direction < 0 &&
+            bufferSize > 0 &&
+            index + 1 === total)
         ) {
+          this.isLoad = false;
           this.renderLoop();
           this.events.dispatchEvent(new CustomEvent('loading:end'));
         }
@@ -125,6 +129,16 @@ export class SqPlayer implements EventEmitter {
       throw new Error('Failed to get canvas context');
     }
     this.ctx = ctx;
+  }
+
+  reverse(): void {
+    this.sequences[this.curSeqName].reverse();
+  }
+
+  reverseAll(): void {
+    for (const seq of Object.values(this.sequences)) {
+      seq.reverse();
+    }
   }
 
   loop(): void {
@@ -203,85 +217,97 @@ export class SqPlayer implements EventEmitter {
   }
 
   private renderLoop = (): void => {
-    const frameData = this.sequences[this.curSeqName].advance(this.frameStep);
-    if (!frameData.img) {
+    const frameData = this.sequences[this.curSeqName].next();
+    if (!frameData.frame) {
+      this.isLoad = true;
       this.events.dispatchEvent(new CustomEvent('loading:start'));
       return;
     }
-    this.renderFrame(frameData.img);
+    if (this.isTransition) {
+      this.renderTransition();
+    } else {
+      this.renderFrame(frameData.frame);
+    }
     frameData.dispatchEvents?.();
     this.timer = setTimeout(this.renderLoop, this.frameDeltaTime);
   };
 
-  private renderFrame(frame: CanvasImage): void {
-    const curSeq = this.sequences[this.curSeqName];
-    this.ctx.clearRect(0, 0, this.frameSize.width, this.frameSize.height);
-    if (this.isTransition) {
-      const transition = this.transitions[0];
-      if (!transition.isStarted) {
-        transition.isStarted = true;
-        // Trigger the start transition event for the entire queue
-        this.events.dispatchEvent(new CustomEvent('transition:start'));
-      }
-      if (transition.startTime === 0) {
-        // Store the last sequence
-        transition.prevSeq = this.sequences[this.curSeqName];
-        // Change the current sequence
-        this.setSequence(transition.seqName);
-        // Apply a new state by calling the callback
-        transition.startCallback && transition.startCallback();
-        transition.startTime = Date.now();
-        if (transition.name) {
-          // Dispatch the start transition event of a named transition
-          this.events.dispatchEvent(
-            new CustomEvent('transition:start', {
-              detail: {name: transition.name},
-            }),
-          );
-        }
-      }
-      const progress = clamp(
-        (Date.now() - transition.startTime) / transition.duration,
-        0,
-        1,
-      );
-      if (progress === 1) {
-        this.transitions.splice(0, 1);
-        if (this.transitions.length === 0) {
-          this.isTransition = false;
-          // Trigger the end transition event for the entire queue
-          this.events.dispatchEvent(new CustomEvent('transition:end'));
-        } else {
-          // Mark the next transition as started to not trigger the start transition event again
-          this.transitions[0].isStarted = true;
-        }
-        if (transition.name) {
-          // Trigger the end transition event for a named transition
-          this.events.dispatchEvent(
-            new CustomEvent('transition:end', {
-              detail: {name: transition.name},
-            }),
-          );
-        }
-      }
-      const transitionFn = transition.transitionFn ?? defaultTransition;
-      transitionFn(this.ctx, progress, {
-        previous: transition.prevSeq,
-        current: curSeq,
-      });
-    } else {
-      this.ctx.drawImage(
-        frame.img,
-        0,
-        0,
-        frame.img.width,
-        frame.img.height,
-        frame.dx,
-        frame.dy,
-        frame.width,
-        frame.height,
-      );
+  private renderTransition(): void {
+    if (this.transitions.length === 0) {
+      console.error('No transition in progress');
+      this.isTransition = false;
+      return;
     }
+    const transition = this.transitions[0];
+    if (!transition.isStarted) {
+      transition.isStarted = true;
+      // Trigger the start transition event for the entire queue
+      this.events.dispatchEvent(new CustomEvent('transition:start'));
+    }
+    if (transition.startTime === 0) {
+      // Store the last sequence
+      transition.prevSeq = this.sequences[this.curSeqName];
+      // Change the current sequence
+      this.setSequence(transition.seqName);
+      // Apply a new state by calling the callback
+      transition.startCallback && transition.startCallback();
+      transition.startTime = Date.now();
+      if (transition.name) {
+        // Dispatch the start transition event of a named transition
+        this.events.dispatchEvent(
+          new CustomEvent('transition:start', {
+            detail: {name: transition.name},
+          }),
+        );
+      }
+    }
+    const progress = clamp(
+      (Date.now() - transition.startTime) / transition.duration,
+      0,
+      1,
+    );
+    if (progress === 1) {
+      this.transitions.splice(0, 1);
+      if (this.transitions.length === 0) {
+        this.isTransition = false;
+        // Trigger the end transition event for the entire queue
+        this.events.dispatchEvent(new CustomEvent('transition:end'));
+      } else {
+        // Mark the next transition as started to not trigger the start transition event again
+        this.transitions[0].isStarted = true;
+      }
+      if (transition.name) {
+        // Trigger the end transition event for a named transition
+        this.events.dispatchEvent(
+          new CustomEvent('transition:end', {
+            detail: {name: transition.name},
+          }),
+        );
+      }
+    }
+    const transitionFn = transition.transitionFn ?? defaultTransition;
+    transitionFn(this.ctx, progress, {
+      previous: transition.prevSeq,
+      current: this.sequences[this.curSeqName],
+    });
+  }
+
+  private renderFrame(frame: CanvasImage): void {
+    if (!frame.img) {
+      return;
+    }
+    this.ctx.clearRect(0, 0, this.frameSize.width, this.frameSize.height);
+    this.ctx.drawImage(
+      frame.img,
+      0,
+      0,
+      frame.img.width,
+      frame.img.height,
+      frame.dx,
+      frame.dy,
+      frame.width,
+      frame.height,
+    );
   }
 
   get isPlaying(): boolean {

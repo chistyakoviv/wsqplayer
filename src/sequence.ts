@@ -8,21 +8,21 @@ export class Sequence implements EventEmitter {
 
   private opts: SeqOptions;
 
-  private imageLoader: Loader<HTMLImageElement> = new ImageLoader();
+  private imageLoader: Loader<HTMLImageElement | null> = new ImageLoader();
   private events: EventTarget = new EventTarget();
   private segments: Segment[] = [];
   private images: CanvasImage[] = [];
 
   private isLooping = false;
   private isPlaying = false;
-  private isLastFrame = false;
 
   private frameSize: FrameSize = {width: 0, height: 0};
-  // TODO:Add the next frame to the state to ensure proper handling of setProgress calls
+  private dir = 1;
+
   private frameState: Frame = {
     current: 0,
     previous: 0,
-    // next: 0,
+    next: 1,
   };
 
   constructor(opts: SeqOptions) {
@@ -72,7 +72,15 @@ export class Sequence implements EventEmitter {
   }
 
   get isEnd(): boolean {
-    return this.isLastFrame;
+    // Set isEnd flag if reached the last frame in forward direction or the first frame in reverse direction
+    return (
+      (this.dir === 1 && this.frameState.current === this.frameCount - 1) ||
+      (this.dir === -1 && this.frameState.current === 0)
+    );
+  }
+
+  get direction(): number {
+    return this.dir;
   }
 
   get currentFrame(): CanvasImage {
@@ -88,7 +96,13 @@ export class Sequence implements EventEmitter {
     this.images = [];
   }
 
-  private calsSizes(img: HTMLImageElement, frameSize: FrameSize): CanvasImage {
+  private calsSizes(
+    img: HTMLImageElement | null,
+    frameSize: FrameSize,
+  ): CanvasImage {
+    if (!img) {
+      return {img: null, width: 0, height: 0, dx: 0, dy: 0};
+    }
     const {width: scaledWidth, height: scaledHeight} = fitCover(
       img.width,
       img.height,
@@ -104,40 +118,50 @@ export class Sequence implements EventEmitter {
     };
   }
 
-  advance(step = 1): FrameData {
-    const lastFrame = this.frameCount - 1;
-    let isEnd = this.frameState.current === lastFrame;
+  reverse() {
+    this.dir *= -1;
+  }
 
+  private nextFrameIndex(): number {
+    const lastFrame = this.frameCount - 1;
+    let next =
+      this.frameState.current + (this.isEnd && !this.isLooping ? 0 : this.dir);
+
+    // Wrap next frame
+    if (next < 0) {
+      next = lastFrame;
+    } else if (next > lastFrame) {
+      next = 0;
+    }
+
+    return next;
+  }
+
+  next(): FrameData {
     if (!this.isPlaying) {
       return {};
     }
 
-    const next =
-      (this.frameState.current + (isEnd && !this.isLooping ? 0 : step)) %
-      this.frameCount;
-
-    if (!this.imageLoader.isLoaded(next)) {
+    if (!this.imageLoader.isLoaded(this.frameState.next)) {
       return {};
     }
 
+    const next = this.nextFrameIndex();
+
     this.frameState = {
       previous: this.frameState.current,
-      current: next,
+      current: this.frameState.next,
+      next: next,
     };
 
     const events: (() => void)[] = [];
 
-    // Reevaluate isEnd after advancing.
-    isEnd = this.frameState.current === lastFrame;
     // Set isLastFrame flag and stop playing when the last frame is reached
-    if (isEnd && !this.isLastFrame) {
-      this.isLastFrame = true;
+    if (this.isEnd) {
       if (!this.isLoop) {
         this.isPlaying = false;
       }
       events.push(() => this.events.dispatchEvent(new CustomEvent('end')));
-    } else if (this.frameState.current !== lastFrame && this.isLastFrame) {
-      this.isLastFrame = false;
     }
 
     // Dispatch progress event
@@ -145,14 +169,19 @@ export class Sequence implements EventEmitter {
     if (Math.abs(frameDiff) > 0) {
       for (let i = 0; i < this.segments.length; i++) {
         const segment = this.segments[i];
-        // TODO(Ilya): implement dispatching progress events in both directions (forward and backward)
         if (
-          this.frameState.current >= segment.start &&
-          this.frameState.previous <= segment.end
+          (this.dir === 1 &&
+            this.frameState.current >= segment.start &&
+            this.frameState.previous <= segment.end) ||
+          (this.dir === -1 &&
+            this.frameState.current <= segment.start &&
+            this.frameState.previous >= segment.end)
         ) {
           const progress =
-            Math.max(this.frameState.current - segment.start, 0.0001) /
-            Math.max(segment.end - segment.start, 0.0001);
+            Math.max(
+              Math.abs(this.frameState.current - segment.start),
+              0.0001,
+            ) / Math.max(Math.abs(segment.end - segment.start), 0.0001);
           events.push(() =>
             this.events.dispatchEvent(
               new CustomEvent(`progress:${segment.start}-${segment.end}`, {
@@ -166,7 +195,7 @@ export class Sequence implements EventEmitter {
       }
     }
     return {
-      img: this.currentFrame,
+      frame: this.currentFrame,
       dispatchEvents: () => {
         events.forEach(fn => fn());
       },
@@ -202,17 +231,17 @@ export class Sequence implements EventEmitter {
     this.frameState = {
       previous: 0,
       current: 0,
+      next: 1,
     };
     this.isLooping = false;
     this.isPlaying = false;
-    this.isLastFrame = false;
   }
 
   setProgress(progress: number): void {
     progress = clamp(progress, 0, 1);
     this.frameState = {
-      previous: this.frameState.current,
-      current: Math.round(this.frameCount * progress),
+      ...this.frameState,
+      next: Math.round(this.frameCount * progress),
     };
   }
 
